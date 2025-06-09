@@ -14,7 +14,7 @@ jobs:
       - uses: actions/checkout@v4
 
       # 🗣 GPT가 diff 읽고 코멘트 달기
-      - uses: cirolini/genai-code-review@v3      # 또는 sshnaidm/gpt-code-review-action@v3 같은 대안
+      - uses: cirolini/genai-code-review@v2   # 또는 sshnaidm/gpt-code-review-action@v3 같은 대안
         with:
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           openai_model:  gpt-4.1-nano            # nano가 가장 저렴
