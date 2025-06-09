@@ -1,0 +1,28 @@
+name: ChatGPT Code Review
+on:
+  pull_request:           # PR 열리거나 커밋 추가될 때마다
+    types: [opened, synchronize, reopened]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:          # PR 코멘트를 쓸 권한
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 🗣 GPT가 diff 읽고 코멘트 달기
+      - uses: cirolini/genai-code-review@v3      # 또는 sshnaidm/gpt-code-review-action@v3 같은 대안
+        with:
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          openai_model:  gpt-4.1-nano            # nano가 가장 저렴
+          language:      ko                      # 코멘트를 한국어로
+          mode:          patch                   # 변경된 부분만 보내서 토큰 절약
+          max_patch_length: 5000                 # 5k 토큰 넘으면 넘어간다
+          openai_temperature: 0.3                # 톤 안정화
+
+      # 비용·토큰 사용량 찍어 주고 싶다면 (선택)
+      - name: Show usage
+        run: cat ${{ steps.review.outputs.usage_json }}
