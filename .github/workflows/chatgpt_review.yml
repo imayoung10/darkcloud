@@ -1,10 +1,12 @@
-name: ChatGPT Code Review
+# .github/workflows/ai-review.yaml
+name: AI Code Review & Score
+
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    paths:              # ← 변경 경로가 여기에 매치될 때만 실행
-        - 'cuda/**'       #  cuda 디렉터리 이하 모든 파일
-        - 'example.py'
+    paths:
+      - 'cuda/**'
+      - 'example.py'
 
 jobs:
   review:
@@ -14,46 +16,51 @@ jobs:
       pull-requests: write
 
     steps:
-      - uses: actions/checkout@v4
-    
-      - name: GenAI Code Review
-        id: genai
-        uses: cirolini/genai-code-review@v2
-        with:
-          openai_api_key:   ${{ secrets.OPENAI_API_KEY }}
-          github_token:     ${{ secrets.GITHUB_TOKEN }}
-          github_pr_id:     ${{ github.event.number }}
-          openai_model:     gpt-4.1-nano
-          language:         ko
-          mode:             patch
-          openai_temperature: 0.3
-          custom_prompt: |
-            다음 JSON 포맷 그대로 응답해 주세요.
-            {
-              "score": <0-100 정수>,
-              "comments": "<PR 코멘트용 마크다운>"
-            }
+    # 0) PR 소스 체크아웃
+    - uses: actions/checkout@v4
 
-      # 2️⃣ 모델 응답을 파일로 저장 (id:genai 의 실제 출력 키 이름은 action.yml 확인)
-      - name: Save review JSON
-        run: echo '${{ steps.genai.outputs.response }}' > review.json
+    # 1) GPT-기반 코드 리뷰 (코멘트 + 점수 포함)
+    - name: GPT Code Review
+      id: gptreview
+      uses: sshnaidm/gpt-code-review-action@v3
+      with:
+        openai-key: ${{ secrets.OPENAI_API_KEY }}
+        # 👇 프롬프트에 0-100 점수를 넣도록 강제
+        prompt: |
+          다음 형식 그대로 응답해 주세요.
 
-      # 3️⃣ 점수만 파싱해서 결과 요약(✔️ 실패 처리 X)
-      - name: Parse score & add summary
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs   = require('fs');
-            const core = require('@actions/core');
+          **SCORE:** <0-100>
+          **REVIEW:**
+          <markdown comments …>
 
-            const { score } = JSON.parse(fs.readFileSync('review.json', 'utf8'));
+        model: gpt-4.1-nano      # 필요 시 변경
+        max-length: 4096
+        post-if-error: false     # GPT 호출 실패해도 워크플로 계속
 
-            core.notice(`AI quality score: ${score}`);
-            await core.summary
-              .addHeading('GenAI Code Review 품질 점수')
-              .addRaw(`**${score}/100**`)
-              .write();
+    # 2) 가장 최근 Bot 코멘트에서 SCORE 숫자만 추출
+    - name: Extract score
+      id: parse
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const pr    = context.issue.number
+          const { data: comments } =
+            await github.rest.issues.listComments({
+              owner:  context.repo.owner,
+              repo:   context.repo.repo,
+              issue_number: pr,
+              per_page: 100
+            })
+          const latest = comments.reverse()
+            .find(c => c.user.type === 'Bot' && c.body.includes('**SCORE:**'))
+          const m = latest?.body.match(/\*\*SCORE:\*\*\s*(\d+)/)
+          const score = m ? Number(m[1]) : 'N/A'
+          core.notice(`AI score: ${score}`)
+          core.setOutput('score', score)
 
-            if (score < 70) core.warning(`점수가 낮습니다: ${score}`);
-
-            core.setOutput('score', score);
+    # 3) 워크플로 Summary 탭에 점수 표시
+    - name: Add summary
+      if: steps.parse.outputs.score != 'N/A'
+      run: |
+        echo "### AI 코드 리뷰 점수" >> $GITHUB_STEP_SUMMARY
+        echo "**${{ steps.parse.outputs.score }}/100**" >> $GITHUB_STEP_SUMMARY
