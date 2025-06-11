@@ -1,28 +1,59 @@
 name: ChatGPT Code Review
 on:
-  pull_request:           # PR 열리거나 커밋 추가될 때마다
+  pull_request:
     types: [opened, synchronize, reopened]
+    paths:              # ← 변경 경로가 여기에 매치될 때만 실행
+        - 'cuda/**'       #  cuda 디렉터리 이하 모든 파일
+        - 'example.py'
 
 jobs:
   review:
     runs-on: ubuntu-latest
-    permissions:          # PR 코멘트를 쓸 권한
+    permissions:
       contents: read
       pull-requests: write
 
     steps:
       - uses: actions/checkout@v4
-
-      # 🗣 GPT가 diff 읽고 코멘트 달기
-      - uses: cirolini/genai-code-review@v2   # 또는 sshnaidm/gpt-code-review-action@v3 같은 대안
+    
+      - name: GenAI Code Review
+        id: genai
+        uses: cirolini/genai-code-review@v2
         with:
-          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
-          openai_model:  gpt-4.1-nano            # nano가 가장 저렴
-          language:      ko                      # 코멘트를 한국어로
-          mode:          patch                   # 변경된 부분만 보내서 토큰 절약
-          max_patch_length: 5000                 # 5k 토큰 넘으면 넘어간다
-          openai_temperature: 0.3                # 톤 안정화
+          openai_api_key:   ${{ secrets.OPENAI_API_KEY }}
+          github_token:     ${{ secrets.GITHUB_TOKEN }}
+          github_pr_id:     ${{ github.event.number }}
+          openai_model:     gpt-4.1-nano
+          language:         ko
+          mode:             patch
+          openai_temperature: 0.3
+          custom_prompt: |
+            다음 JSON 포맷 그대로 응답해 주세요.
+            {
+              "score": <0-100 정수>,
+              "comments": "<PR 코멘트용 마크다운>"
+            }
 
-      # 비용·토큰 사용량 찍어 주고 싶다면 (선택)
-      - name: Show usage
-        run: cat ${{ steps.review.outputs.usage_json }}
+      # 2️⃣ 모델 응답을 파일로 저장 (id:genai 의 실제 출력 키 이름은 action.yml 확인)
+      - name: Save review JSON
+        run: echo '${{ steps.genai.outputs.response }}' > review.json
+
+      # 3️⃣ 점수만 파싱해서 결과 요약(✔️ 실패 처리 X)
+      - name: Parse score & add summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs   = require('fs');
+            const core = require('@actions/core');
+
+            const { score } = JSON.parse(fs.readFileSync('review.json', 'utf8'));
+
+            core.notice(`AI quality score: ${score}`);
+            await core.summary
+              .addHeading('GenAI Code Review 품질 점수')
+              .addRaw(`**${score}/100**`)
+              .write();
+
+            if (score < 70) core.warning(`점수가 낮습니다: ${score}`);
+
+            core.setOutput('score', score);
