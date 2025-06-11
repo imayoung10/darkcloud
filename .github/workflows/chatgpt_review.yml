@@ -18,24 +18,25 @@ jobs:
 
       - uses: actions/checkout@v4
 
-      - run: echo "httpx<0.28" > ${{ runner.temp }}/constraints.txt
+      - name: Pin httpx (<0.28) via constraint
+        run: echo "httpx<0.28" > ${{ runner.temp }}/constraints.txt
 
       - name: GPT Code Review
         id: gptreview
         uses: sshnaidm/gpt-code-review-action@v2.1
-        env:
-          PIP_CONSTRAINT: ${{ runner.temp }}/constraints.txt
+        env:                      
+            PIP_CONSTRAINT: ${{ runner.temp }}/constraints.txt
         with:
           openai-key: ${{ secrets.OPENAI_API_KEY }}
-          model: gpt-3.5-turbo
-          max-length:  4096         
+
           prompt: |
             다음 형식 그대로 응답해 주세요.
-
-
             **SCORE:** <0-100>
             **REVIEW:**
             <markdown comments …>
+          model: gpt-3.5-turbo     
+          max-length: 4500
+          post-if-error: false     
 
       - name: Parse SCORE & REVIEW
         id: parse
@@ -52,7 +53,7 @@ jobs:
               });
 
             const bot = comments.reverse()
-              .find(c => c.user.type === 'Bot' && c.body.startsWith('SCORE='));
+              .find(c => c.user.type === 'Bot' && c.body.includes('**SCORE:**'));
 
             if (!bot) {
               core.setFailed('Bot comment with SCORE not found');
