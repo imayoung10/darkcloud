@@ -36,7 +36,7 @@ jobs:
           <markdown comments …>
 
         model: gpt-3.5-turbo     # 필요 시 변경
-        max-length: 3000
+        max-length: 4000
         post-if-error: false     # GPT 호출 실패해도 워크플로 계속
 
     # 2) 가장 최근 Bot 코멘트에서 SCORE 숫자만 추출
@@ -46,20 +46,15 @@ jobs:
       with:
         script: |
           const pr = context.issue.number;
-          const { data: comments } =
-            await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo:  context.repo.repo,
-              issue_number: pr,
-              per_page: 100,
-            });
-          const bot = comments.reverse()
-            .find(c => c.user.type === 'Bot' && c.body.includes('**SCORE:**'));
+          const comments = (await github.rest.issues.listComments({
+            owner: context.repo.owner, repo: context.repo.repo,
+            issue_number: pr, per_page: 100
+          })).data.reverse();
+          const bot = comments.find(c => c.user.type === 'Bot' && c.body.includes('**SCORE:**'));
           const m = bot?.body.match(/\*\*SCORE:\*\*\s*(\d+)/);
           core.setOutput('score', m ? m[1] : 'N/A');
 
-    # 4) 워크플로 Summary 탭에 점수 표시
-    - name: Add Summary
+    - name: Add summary
       if: steps.parse.outputs.score != 'N/A'
       run: |
         echo "### AI 코드 리뷰 점수" >> $GITHUB_STEP_SUMMARY
