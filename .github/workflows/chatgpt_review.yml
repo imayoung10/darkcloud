@@ -28,9 +28,9 @@ jobs:
       with:
         openai-key: ${{ secrets.OPENAI_API_KEY }}
         prompt: |
-          # 반드시 아래 두 줄만 출력하세요 (한글 사용).
-          SCORE=<0~100 정수>
-          REVIEW=<한 문장 요약 또는 개선점>
+          **SCORE:** <0-100>
+          **REVIEW:**
+          <…마크다운 코멘트…>
         model: gpt-3.5-turbo     # 필요 시 변경
         max-length: 4096
         post-if-error: false     # GPT 호출 실패해도 워크플로 계속
