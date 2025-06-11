@@ -26,17 +26,16 @@ jobs:
         id: gptreview
         uses: sshnaidm/gpt-code-review-action@v2.1
         env:
-          OPENAI_KEY:     ${{ secrets.OPENAI_API_KEY }}
           PIP_CONSTRAINT: ${{ runner.temp }}/constraints.txt
         with:
+          OPENAI_KEY: ${{ secrets.OPENAI_API_KEY }}
           model: gpt-3.5-turbo
-          max-length:  3500
-          temperature: 0          # 형식 준수율↑
+          max-length:  4096         # 형식 준수율↑
           prompt: |
-            반드시 아래 **두 줄**만 한국어로 출력하세요.
-
-            SCORE=<0-100>
-            REVIEW=<마크다운 코멘트 한두 문장>
+            다음 형식 그대로 응답해 주세요.
+            **SCORE:** <0-100>
+            **REVIEW:**
+            <markdown comments …>
 
       - name: Parse SCORE & REVIEW
         id: parse
