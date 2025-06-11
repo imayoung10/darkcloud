@@ -28,7 +28,7 @@ jobs:
         env:
           PIP_CONSTRAINT: ${{ runner.temp }}/constraints.txt
         with:
-          OPENAI_KEY: ${{ secrets.OPENAI_API_KEY }}
+          openai-key: ${{ secrets.OPENAI_API_KEY }}
           model: gpt-3.5-turbo
           max-length:  4096         # 형식 준수율↑
           prompt: |
