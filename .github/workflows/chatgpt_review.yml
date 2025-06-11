@@ -27,16 +27,16 @@ jobs:
           PIP_CONSTRAINT: ${{ runner.temp }}/constraints.txt
       with:
         openai-key: ${{ secrets.OPENAI_API_KEY }}
-        
+        temperature: 0
         prompt: |
-          반드시 아래 형식 **그대로** 응답하세요.
+          # 반드시 아래 예시 “단 두 줄” 형식을 그대로 지켜서 한국어로 응답하세요.
+          # 다른 글, 마크다운, 설명은 금지합니다.
 
-          **SCORE:** <0-100>
-          **REVIEW:**
-          <markdown comments …>
+          SCORE=87
+          REVIEW=큰 문제는 없지만 성능 최적화 공간이 존재합니다.
 
         model: gpt-3.5-turbo     # 필요 시 변경
-        max-length: 4000
+        max-length: 2000
         post-if-error: false     # GPT 호출 실패해도 워크플로 계속
 
     # 2) 가장 최근 Bot 코멘트에서 SCORE 숫자만 추출
