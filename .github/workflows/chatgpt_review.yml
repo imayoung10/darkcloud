@@ -1,9 +1,12 @@
-# .github/workflows/ai-review.yaml
-name: AI Code Review & Score
+# .github/workflows/ai-review-gate.yml
+name: AI Code Review with Gate @85
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+    # paths:
+    #   - 'cuda/**'
+    #   - 'example.py'
 
 jobs:
   review:
@@ -13,45 +16,75 @@ jobs:
       pull-requests: write
 
     steps:
-    # 0) PR 소스 체크아웃
-    - uses: actions/checkout@v4
 
-    # 1) GPT-기반 코드 리뷰 (코멘트 + 점수 포함)
-    - name: Pin httpx (<0.28) via constraint
-      run: echo "httpx<0.28" > ${{ runner.temp }}/constraints.txt
+      - uses: actions/checkout@v4
 
-    - name: GPT Code Review
-      id: gptreview
-      uses: sshnaidm/gpt-code-review-action@v2.1
-      env:                      # ← 환경변수 자리에 둡니다
+      
+      - run: echo "httpx<0.28" > ${{ runner.temp }}/constraints.txt
+
+      - name: GPT Code Review
+        id: gptreview
+        uses: sshnaidm/gpt-code-review-action@v2.1
+        env:
+          OPENAI_KEY:     ${{ secrets.OPENAI_API_KEY }}
           PIP_CONSTRAINT: ${{ runner.temp }}/constraints.txt
-      with:
-        openai-key: ${{ secrets.OPENAI_API_KEY }}
-        prompt: |
-          **SCORE:** <0-100>
-          **REVIEW:**
-          <…마크다운 코멘트…>
-        model: gpt-3.5-turbo     # 필요 시 변경
-        max-length: 4096
-        post-if-error: false     # GPT 호출 실패해도 워크플로 계속
+        with:
+          model: gpt-3.5-turbo
+          max-length:  3500
+          temperature: 0          # 형식 준수율↑
+          prompt: |
+            반드시 아래 **두 줄**만 한국어로 출력하세요.
 
-    # 2) 가장 최근 Bot 코멘트에서 SCORE 숫자만 추출
-    - name: Extract SCORE
-      id: parse
-      uses: actions/github-script@v7
-      with:
-        script: |
-          const pr = context.issue.number;
-          const comments = (await github.rest.issues.listComments({
-            owner: context.repo.owner, repo: context.repo.repo,
-            issue_number: pr, per_page: 100
-          })).data.reverse();
-          const bot = comments.find(c => c.user.type === 'Bot' && c.body.includes('**SCORE:**'));
-          const m = bot?.body.match(/\*\*SCORE:\*\*\s*(\d+)/);
-          core.setOutput('score', m ? m[1] : 'N/A');
+            SCORE=<0-100>
+            REVIEW=<마크다운 코멘트 한두 문장>
 
-    - name: Add summary
-      if: steps.parse.outputs.score != 'N/A'
-      run: |
-        echo "### AI 코드 리뷰 점수" >> $GITHUB_STEP_SUMMARY
-        echo "**${{ steps.parse.outputs.score }}/100**" >> $GITHUB_STEP_SUMMARY
+      - name: Parse SCORE & REVIEW
+        id: parse
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.issue.number;
+            const { data: comments } =
+              await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                issue_number: pr,
+                per_page: 100
+              });
+
+            // 최신 Bot 코멘트
+            const bot = comments.reverse()
+              .find(c => c.user.type === 'Bot' && c.body.startsWith('SCORE='));
+
+            if (!bot) {
+              core.setFailed('Bot comment with SCORE not found');
+              return;
+            }
+
+            const body = bot.body.trim();
+            const scoreMatch  = body.match(/^SCORE\s*=\s*(\d{1,3})/m);
+            const reviewMatch = body.match(/^REVIEW\s*=\s*(.+)$/m);
+
+            const score  = scoreMatch  ? Number(scoreMatch[1]) : NaN;
+            const review = reviewMatch ? reviewMatch[1].trim() : '(리뷰 없음)';
+
+            core.notice(`AI SCORE = ${score}`);
+            core.setOutput('score',  score);
+            core.setOutput('review', review);
+
+      # 4) 요약 탭에 항상 점수 + 리뷰 남기기
+      - name: Add summary (always)
+        if: always()                # ← 실패하더라도 실행
+        run: |
+          echo "### AI 코드 리뷰 결과" >> $GITHUB_STEP_SUMMARY
+          echo "**점수:** ${{ steps.parse.outputs.score }}/100" >> $GITHUB_STEP_SUMMARY
+          echo "**리뷰:** ${{ steps.parse.outputs.review }}"   >> $GITHUB_STEP_SUMMARY
+
+      # 5) 품질 게이트: 85점 미만이면 잡 실패
+      - name: Fail if score < 85
+        if: steps.parse.outputs.score != ''   # 점수 파싱 성공 시에만
+        run: |
+          if [ "${{ steps.parse.outputs.score }}" -lt 85 ]; then
+            echo "❌ 85점 미만 – 코드 수정을 요구합니다."
+            exit 1
+          fi
