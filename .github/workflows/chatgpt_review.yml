@@ -20,14 +20,15 @@ jobs:
     - uses: actions/checkout@v4
 
     # 1) GPT-기반 코드 리뷰 (코멘트 + 점수 포함)
-    - name: Pin httpx
-      run: pip install --no-cache-dir "httpx<0.27"
+    - name: Pin httpx (<0.28) via constraint
+      run: echo "httpx<0.28" > ${{ runner.temp }}/constraints.txt
 
     - name: GPT Code Review
       id: gptreview
       uses: sshnaidm/gpt-code-review-action@v2.1
       with:
         openai-key: ${{ secrets.OPENAI_API_KEY }}
+        PIP_CONSTRAINT: ${{ runner.temp }}/constraints.txt 
         # 👇 프롬프트에 0-100 점수를 넣도록 강제
         prompt: |
           다음 형식 그대로 응답해 주세요.
@@ -41,28 +42,26 @@ jobs:
         post-if-error: false     # GPT 호출 실패해도 워크플로 계속
 
     # 2) 가장 최근 Bot 코멘트에서 SCORE 숫자만 추출
-    - name: Extract score
+    - name: Extract SCORE
       id: parse
       uses: actions/github-script@v7
       with:
         script: |
-          const pr    = context.issue.number
+          const pr = context.issue.number;
           const { data: comments } =
             await github.rest.issues.listComments({
-              owner:  context.repo.owner,
-              repo:   context.repo.repo,
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
               issue_number: pr,
-              per_page: 100
-            })
-          const latest = comments.reverse()
-            .find(c => c.user.type === 'Bot' && c.body.includes('**SCORE:**'))
-          const m = latest?.body.match(/\*\*SCORE:\*\*\s*(\d+)/)
-          const score = m ? Number(m[1]) : 'N/A'
-          core.notice(`AI score: ${score}`)
-          core.setOutput('score', score)
+              per_page: 100,
+            });
+          const bot = comments.reverse()
+            .find(c => c.user.type === 'Bot' && c.body.includes('**SCORE:**'));
+          const m = bot?.body.match(/\*\*SCORE:\*\*\s*(\d+)/);
+          core.setOutput('score', m ? m[1] : 'N/A');
 
-    # 3) 워크플로 Summary 탭에 점수 표시
-    - name: Add summary
+    # 4) 워크플로 Summary 탭에 점수 표시
+    - name: Add Summary
       if: steps.parse.outputs.score != 'N/A'
       run: |
         echo "### AI 코드 리뷰 점수" >> $GITHUB_STEP_SUMMARY
