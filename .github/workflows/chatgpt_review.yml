@@ -36,7 +36,7 @@ jobs:
           <markdown comments …>
 
         model: gpt-3.5-turbo     # 필요 시 변경
-        max-length: 700
+        max-length: 3000
         post-if-error: false     # GPT 호출 실패해도 워크플로 계속
 
     # 2) 가장 최근 Bot 코멘트에서 SCORE 숫자만 추출
