@@ -26,10 +26,11 @@ jobs:
     - name: GPT Code Review
       id: gptreview
       uses: sshnaidm/gpt-code-review-action@v2.1
+      env:                      # ← 환경변수 자리에 둡니다
+          PIP_CONSTRAINT: ${{ runner.temp }}/constraints.txt
       with:
         openai-key: ${{ secrets.OPENAI_API_KEY }}
-        PIP_CONSTRAINT: ${{ runner.temp }}/constraints.txt 
-        # 👇 프롬프트에 0-100 점수를 넣도록 강제
+        
         prompt: |
           다음 형식 그대로 응답해 주세요.
 
@@ -37,8 +38,8 @@ jobs:
           **REVIEW:**
           <markdown comments …>
 
-        model: gpt-4.1-nano      # 필요 시 변경
-        max-length: 4096
+        model: gpt-3.5-turbo     # 필요 시 변경
+        max-length: 700
         post-if-error: false     # GPT 호출 실패해도 워크플로 계속
 
     # 2) 가장 최근 Bot 코멘트에서 SCORE 숫자만 추출
