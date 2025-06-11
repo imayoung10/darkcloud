@@ -33,6 +33,8 @@ jobs:
           max-length:  4096         # 형식 준수율↑
           prompt: |
             다음 형식 그대로 응답해 주세요.
+
+            
             **SCORE:** <0-100>
             **REVIEW:**
             <markdown comments …>
