@@ -25,7 +25,7 @@ jobs:
 
     - name: GPT Code Review
       id: gptreview
-      uses: sshnaidm/gpt-code-review-action@v2.0
+      uses: sshnaidm/gpt-code-review-action@v2.1
       with:
         openai-key: ${{ secrets.OPENAI_API_KEY }}
         # 👇 프롬프트에 0-100 점수를 넣도록 강제
