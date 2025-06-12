@@ -1,8 +1,8 @@
 from transformers import AutoTokenizer, pipeline
 import json
 import torch
-from hf_ref import NewPhi3Config
-from model import CustomedPhi3ForCausalLM
+from src.hf_ref import NewPhi3Config
+from src.model import CustomedPhi3ForCausalLM
 import time
 import argparse
 
