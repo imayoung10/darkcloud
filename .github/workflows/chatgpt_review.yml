@@ -24,63 +24,73 @@ jobs:
       - name: GPT Code Review
         id: gptreview
         # uses: sshnaidm/gpt-code-review-action@v2.1
-        uses: cirolini/genai-code-review@v1.1
+        uses: cirolini/genai-code-review@v2
         env:                      
             PIP_CONSTRAINT: ${{ runner.temp }}/constraints.txt
         with:
           openai-key: ${{ secrets.OPENAI_API_KEY }}
-          github_token:   ${{ secrets.GITHUB_TOKEN }}
-          github_pr_id:   ${{ github.event.number }}
-          mode:           patch
-          language:       ko
-          custom_prompt: |
-            반드시 아래 JSON 하나만 출력하세요.
-            {"score":<0-100>, "review":"<한글 코멘트>"}
 
-      - name: Extract score & review
-        id: extract                        
+          prompt: |
+            **SCORE:** <0-100>
+            **REVIEW:** <한 문장 총평>
+            **IMPROVEMENTS:**
+            - <개선 제안 1>
+            - <개선 제안 2>
+            - <필요시 계속 추가>
+
+          model: gpt-3.5-turbo     
+          max-length: 4500
+          post-if-error: false     
+
+      - name: Parse SCORE, REVIEW, IMPROVEMENTS
+        id: parse
         uses: actions/github-script@v7
         with:
           script: |
             const pr = context.issue.number;
-            const { data: cmts } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo:  context.repo.repo,
-              issue_number: pr,
-              per_page: 100
-            });
-
-            const body = cmts.reverse()
-              .find(c => c.user.type === 'Bot' && c.body.trim().startsWith('{'))
-              ?.body.trim();
-
-            if (!body) {
-              core.warning('Bot comment with JSON not found');
-              core.setOutput('score', '');
-              core.setOutput('review', '');
+            const { data: comments } =
+              await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                issue_number: pr,
+                per_page: 100
+              });
+      
+            const bot = comments.reverse()
+              .find(c => c.user.type === 'Bot' && c.body.includes('**SCORE:**'));
+      
+            if (!bot) {
+              core.setFailed('Bot comment with SCORE not found');
               return;
             }
+      
+            const body = bot.body.trim();
+      
+            const scoreMatch  = body.match(/\*\*SCORE:\*\*\s*(\d{1,3})/);
+            const reviewMatch = body.match(/\*\*REVIEW:\*\*\s*(.+)/);
+            const improvementsBlock = body.split('**IMPROVEMENTS:**')[1] || '';
+            const improvements = improvementsBlock
+              .split('\n')
+              .map(l => l.replace(/^- /, '').trim())
+              .filter(Boolean);
+      
+            core.setOutput('score',        scoreMatch  ? Number(scoreMatch[1]) : NaN);
+            core.setOutput('review',       reviewMatch ? reviewMatch[1].trim() : '(리뷰 없음)');
+            core.setOutput('improvements', improvements.join('\n- '));
 
-            let score = '', review = '';
-            try {
-              ({ score, review } = JSON.parse(body));
-            } catch (e) {
-              core.warning('JSON parse failed: ' + e);
-            }
-            core.setOutput('score', score);
-            core.setOutput('review', review);
- 
+
       - name: Add summary (always)
-        if: always()
+        if: always()                
         run: |
           echo "### AI 코드 리뷰 결과" >> $GITHUB_STEP_SUMMARY
-          echo "**점수:** ${{ steps.extract.outputs.score }}/100" >> $GITHUB_STEP_SUMMARY
-          echo "**리뷰:** ${{ steps.extract.outputs.review }}"   >> $GITHUB_STEP_SUMMARY
+          echo "**Score** ${{ steps.parse.outputs.score }}/100" >> $GITHUB_STEP_SUMMARY
+          echo "**Review:** ${{ steps.parse.outputs.review }}"   >> $GITHUB_STEP_SUMMARY
+          echo -e "**Improvement Suggestions:**\n- ${{ steps.parse.outputs.improvements }}" >> $GITHUB_STEP_SUMMARY
 
       - name: Fail if score < 85
-        if: ${{ steps.extract.outputs.score != '' }}
+        if: steps.parse.outputs.score != ''   
         run: |
-          if [ "${{ steps.extract.outputs.score }}" -lt 85 ]; then
-            echo "❌ 85점 미만 – 코드 수정을 요구합니다."
+          if [ "${{ steps.parse.outputs.score }}" -lt 85 ]; then
+            echo "❌ 85점 미만 코드 수정을 요구합니다."
             exit 1
           fi
