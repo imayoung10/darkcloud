@@ -7,7 +7,7 @@ from transformers import PreTrainedModel, Phi3Config
 from transformers.utils import ModelOutput
 from safetensors import safe_open
 import json
-from hf_ref import (
+from src.hf_ref import (
     Phi3RMSNorm,
     Phi3DecoderLayer,
     NewPhi3Config
