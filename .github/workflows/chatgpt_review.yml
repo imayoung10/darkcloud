@@ -23,7 +23,8 @@ jobs:
 
       - name: GPT Code Review
         id: gptreview
-        uses: sshnaidm/gpt-code-review-action@v2.1
+        # uses: sshnaidm/gpt-code-review-action@v2.1
+        uses: cirolini/genai-code-review@v2
         env:                      
             PIP_CONSTRAINT: ${{ runner.temp }}/constraints.txt
         with:
