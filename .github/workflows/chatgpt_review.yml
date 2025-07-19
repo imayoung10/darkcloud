@@ -1,0 +1,88 @@
+name: AI Code Review with Gate @85
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    # paths:
+    #   - 'cuda/**'
+    #   - 'example.py'
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+
+      - uses: actions/checkout@v4
+
+      - name: Pin httpx (<0.28) via constraint
+        run: echo "httpx<0.28" > ${{ runner.temp }}/constraints.txt
+
+      - name: GPT Code Review
+        id: gptreview
+        # uses: sshnaidm/gpt-code-review-action@v2.1
+        uses: cirolini/genai-code-review@v2
+        env:                      
+            PIP_CONSTRAINT: ${{ runner.temp }}/constraints.txt
+        with:
+          openai-key: ${{ secrets.OPENAI_API_KEY }}
+
+          prompt: |
+            다음 형식 그대로 응답해 주세요.
+            **SCORE:** <0-100>
+            **REVIEW:**
+            <markdown comments …>
+          model: gpt-3.5-turbo     
+          max-length: 4500
+          post-if-error: false     
+
+      - name: Parse SCORE & REVIEW
+        id: parse
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.issue.number;
+            const { data: comments } =
+              await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                issue_number: pr,
+                per_page: 100
+              });
+
+            const bot = comments.reverse()
+              .find(c => c.user.type === 'Bot' && c.body.includes('**SCORE:**'));
+
+            if (!bot) {
+              core.setFailed('Bot comment with SCORE not found');
+              return;
+            }
+
+            const body = bot.body.trim();
+            const scoreMatch  = body.match(/\*\*SCORE:\*\*\s*(\d+)/);
+            const reviewMatch = body.match(/^REVIEW\s*=\s*(.+)$/m);
+
+            const score  = scoreMatch  ? Number(scoreMatch[1]) : NaN;
+            const review = reviewMatch ? reviewMatch[1].trim() : '(리뷰 없음)';
+
+            core.notice(`AI SCORE = ${score}`);
+            core.setOutput('score',  score);
+            core.setOutput('review', review);
+
+      - name: Add summary (always)
+        if: always()                
+        run: |
+          echo "### AI 코드 리뷰 결과" >> $GITHUB_STEP_SUMMARY
+          echo "**점수:** ${{ steps.parse.outputs.score }}/100" >> $GITHUB_STEP_SUMMARY
+          echo "**리뷰:** ${{ steps.parse.outputs.review }}"   >> $GITHUB_STEP_SUMMARY
+
+      - name: Fail if score < 85
+        if: steps.parse.outputs.score != ''   
+        run: |
+          if [ "${{ steps.parse.outputs.score }}" -lt 85 ]; then
+            echo "❌ 85점 미만 코드 수정을 요구합니다."
+            exit 1
+          fi
