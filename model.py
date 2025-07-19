@@ -6,13 +6,14 @@ from torch import nn
 from transformers import PreTrainedModel, Phi3Config
 from transformers.utils import ModelOutput
 from safetensors import safe_open
-import json
 from hf_ref import (
     Phi3RMSNorm,
     Phi3DecoderLayer,
     NewPhi3Config
 )
-import time
+from unified_define import copy_to_unified
+
+
 pre_weight_map = {}
 file_num = 1
 tensor_dict = {}

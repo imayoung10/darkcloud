@@ -6,6 +6,7 @@ from model import CustomedPhi3ForCausalLM
 import time
 import argparse
 
+
 def load_data(file_path):
     model_inputs = []
     with open(file_path, 'r', encoding='utf-8') as f:
@@ -17,6 +18,7 @@ def load_data(file_path):
     messages = [inputs['message'] for inputs in sorted_model_inputs]
     labels = [inputs['answer'] for inputs in sorted_model_inputs]
     return messages, labels
+
 
 def main(file_path, base_path, batch_size, max_new_tokens):
     model_id = "microsoft/Phi-3-medium-4k-instruct"
